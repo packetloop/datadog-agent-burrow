@@ -1,0 +1,8 @@
+init_config:
+instances:
+  - burrow_uri: http://burrow:8000
+    clusters:
+      - local
+    tags:
+      - foo
+      - bar
