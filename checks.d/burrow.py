@@ -91,6 +91,7 @@ class BurrowCheck(AgentCheck):
         """
         offsets = json.get("offsets")
         if offsets:
+            self.gauge("kafka.%s.offsets.total" % offsets_type, sum(offsets), tags=tags)
             for partition_number, offset in enumerate(offsets):
                 new_tags = tags + ["partition:%s" % partition_number]
                 self.gauge("kafka.%s.offsets" % offsets_type, offset, tags=new_tags)
