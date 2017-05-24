@@ -61,7 +61,7 @@ class BurrowCheck(AgentCheck):
                 for partition in status.get("partitions", []):
                     partition_tags = consumer_tags + ["topic:%s" % partition["topic"], "partition:%s" % partition["partition"]]
                     self._submit_partition_lags(partition, partition_tags)
-                    self._submit_lag_status("kafka.consumer.partition_lag_status", status["status"], tags=consumer_tags)
+                    self._submit_lag_status("kafka.consumer.partition_lag_status", partition["status"], tags=partition_tags)
 
     def _submit_lag_status(self, metric_namespace, status, tags):
         burrow_status = {
