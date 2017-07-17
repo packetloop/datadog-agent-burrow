@@ -149,6 +149,9 @@ class BurrowCheck(AgentCheck):
         """
         offsets = json.get("offsets")
         if offsets:
+            # for unconsumed or empty partitions, change an offset of -1 to 0 so the
+            # sum isn't affected by the number of empty partitions.
+            offsets = [max(offset, 0) for offset in offsets]
             self.gauge("kafka.%s.offsets.total" % offsets_type, sum(offsets), tags=tags)
             for partition_number, offset in enumerate(offsets):
                 new_tags = tags + ["partition:%s" % partition_number]
