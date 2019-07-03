@@ -54,7 +54,6 @@ class BurrowCheck(AgentCheck):
                 status = lag_json["status"]
                 consumer_tags = ["cluster:%s" % cluster, "consumer:%s" % consumer] + extra_tags
 
-                self.gauge("kafka.consumer.maxlag", status["maxlag"], tags=consumer_tags)
                 self.gauge("kafka.consumer.totallag", status["totallag"], tags=consumer_tags)
                 self._submit_lag_status("kafka.consumer.lag_status", status["status"], tags=consumer_tags)
 
@@ -84,9 +83,10 @@ class BurrowCheck(AgentCheck):
             self.gauge("%s.%s" % (metric_namespace, metric_name.lower()), value, tags=tags)
 
     def _submit_partition_lags(self, partition, tags):
-        lag = partition.get("end").get("lag")
-        timestamp = partition.get("end").get("timestamp") / 1000
-        self.gauge("kafka.consumer.partition_lag", lag, tags=tags, timestamp=timestamp)
+        end = partition.get("end")
+        if end is not None:
+            lag = end.get("lag")
+            self.gauge("kafka.consumer.partition_lag", lag, tags=tags)
 
     def _check_burrow(self, burrow_address, extra_tags):
         """
