@@ -25,7 +25,6 @@ Metrics
 * `kafka.consumer.offsets.total` - Total offset of each consumer group
 
 *Lag*
-* `kafka.consumer.maxlag` - Maximum lag of each consumer group
 * `kafka.consumer.totallag` - Total lag of each consumer group
 * `kafka.consumer.partition_lag` - Lag of each partition of a consumer group
 
