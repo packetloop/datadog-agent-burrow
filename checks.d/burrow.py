@@ -1,5 +1,5 @@
 # stdlib
-from urlparse import urljoin
+from urllib.parse import urljoin
 
 # 3rd Party
 import requests
@@ -79,7 +79,7 @@ class BurrowCheck(AgentCheck):
 
         burrow_status[status] = 1
 
-        for metric_name, value in burrow_status.iteritems():
+        for metric_name, value in burrow_status.items():
             self.gauge("%s.%s" % (metric_namespace, metric_name.lower()), value, tags=tags)
 
     def _submit_partition_lags(self, partition, tags):
