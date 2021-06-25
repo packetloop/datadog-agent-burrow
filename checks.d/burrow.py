@@ -12,7 +12,7 @@ SERVICE_CHECK_NAME = 'burrow.can_connect'
 
 DEFAULT_BURROW_URI = 'http://localhost:8000'
 
-CLUSTER_ENDPOINT = '/v2/kafka'
+CLUSTER_ENDPOINT = '/v3/kafka'
 
 CHECK_TIMEOUT = 10
 
@@ -86,7 +86,7 @@ class BurrowCheck(AgentCheck):
         end = partition.get("end")
         if end is not None:
             lag = end.get("lag")
-            self.gauge("kafka.consumer.partition_lag", lag, tags=tags)
+            self.gauge("kafka.consumer.partition_lag", lag, tags=tags, timestamp=end.get("timestamp"))
 
     def _check_burrow(self, burrow_address, extra_tags):
         """
@@ -112,17 +112,15 @@ class BurrowCheck(AgentCheck):
         Retrieve the offsets for all topics in the clusters
         """
         for cluster in clusters:
-            cluster_path = "%s/%s" % (CLUSTER_ENDPOINT, cluster)
-            offsets_topic = self._rest_request_to_json(burrow_address, cluster_path)["cluster"]["offsets_topic"]
-            topics_path = "%s/topic" % cluster_path
+            topics_path = "%s/%s/topic" % (CLUSTER_ENDPOINT, cluster)
             topics_list = self._rest_request_to_json(burrow_address, topics_path).get("topics", [])
             for topic in topics_list:
-                if topic == offsets_topic:
+                if topic == '__consumer_offsets':
                     continue
                 topic_path = "%s/%s" % (topics_path, topic)
-                response = self._rest_request_to_json(burrow_address, topic_path)
+                offsets = self._rest_request_to_json(burrow_address, topic_path).get("offsets", [])
                 tags = ["topic:%s" % topic, "cluster:%s" % cluster] + extra_tags
-                self._submit_offsets_from_json(offsets_type="topic", json=response, tags=tags)
+                self._submit_offsets_for_topic(offsets=offsets, tags=tags)
 
     def _consumer_groups_offsets(self, clusters, burrow_address, extra_tags):
         """
@@ -132,30 +130,42 @@ class BurrowCheck(AgentCheck):
             consumers_path = "%s/%s/consumer" % (CLUSTER_ENDPOINT, cluster)
             consumers_list = self._rest_request_to_json(burrow_address, consumers_path).get("consumers", [])
             for consumer in consumers_list:
-                topics_path = "%s/%s/topic" % (consumers_path, consumer)
-                topics_list = self._rest_request_to_json(burrow_address, topics_path).get("topics", [])
-                for topic in topics_list:
-                    topic_path = "%s/%s" % (topics_path, topic)
-                    response = self._rest_request_to_json(burrow_address, topic_path)
-                    if not response:
-                        continue
+                if consumer == "burrow-local":
+                    continue
+                consumer_path = "%s/%s" % (consumers_path, consumer)
+                topics_dict = self._rest_request_to_json(burrow_address, consumer_path).get("topics", {})
+                for topic in topics_dict.keys():
                     tags = ["topic:%s" % topic, "cluster:%s" % cluster,
                             "consumer:%s" % consumer] + extra_tags
-                    self._submit_offsets_from_json(offsets_type="consumer", json=response, tags=tags)
+                    self._submit_offsets_for_consumer(topic_dict=topics_dict[topic], tags=tags)
 
-    def _submit_offsets_from_json(self, offsets_type, json, tags):
+    def _submit_offsets_for_topic(self, offsets, tags):
         """
         Find the offsets and push them into the metrics
         """
-        offsets = json.get("offsets")
         if offsets:
             # for unconsumed or empty partitions, change an offset of -1 to 0 so the
             # sum isn't affected by the number of empty partitions.
             offsets = [max(offset, 0) for offset in offsets]
-            self.gauge("kafka.%s.offsets.total" % offsets_type, sum(offsets), tags=tags)
+            self.gauge("kafka.topic.offsets.total", sum(offsets), tags=tags)
             for partition_number, offset in enumerate(offsets):
                 new_tags = tags + ["partition:%s" % partition_number]
-                self.gauge("kafka.%s.offsets" % offsets_type, offset, tags=new_tags)
+                self.gauge("kafka.topic.offsets", offset, tags=new_tags)
+
+    def _submit_offsets_for_consumer(self, topic_dict, tags):
+        """
+        Find the offsets and push them into the metrics
+        """
+        offsets = []
+        if topic_dict:
+            for partition_number, partition in enumerate(topic_dict):
+                new_tags = tags + ["partition:%s" % partition_number]
+                offset_info = max([offset_info for offset_info in partition["offsets"] if offset_info is not None], key=lambda offset_info: offset_info["offset"])
+                offset = offset_info["offset"]
+                self.gauge("kafka.consumer.offsets", offset, tags=new_tags, timestamp=offset_info["timestamp"])
+                offsets.append(offset)
+
+            self.gauge("kafka.consumer.offsets.total", sum(offsets), tags=tags)
 
     def _find_clusters(self, address, target):
         """
